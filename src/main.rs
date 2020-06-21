@@ -1,6 +1,7 @@
 use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
+use git2::Commit;
 use std::time::SystemTime;
 
 struct HashPrefixChecker {
@@ -46,19 +47,22 @@ fn main()  {
     let repo = Repository::discover("/home/liauys/Code/test-repo").unwrap();
     let head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
+    let commit_message = commit.message().unwrap();
     let tree = commit.tree().unwrap();
     let signature = repo.signature().unwrap();
     let mut i: i64 = 1;
     let now = SystemTime::now();
     let prefix = "00";
     let checker = HashPrefixChecker::new(prefix);
+    let parents: Vec<Commit> = commit.parents().collect();
+    let parents_refs: Vec<&Commit> = parents.iter().collect();
     loop {
         let commit_buf = repo.commit_create_buffer(
             &signature,
             &signature,
-            &format!("Test creating a commit that starts with 0\n\nNONCE {}", i),
+            &format!("{}\nNONCE {}", commit_message, i),
             &tree,
-            &[&commit],
+            &parents_refs,
         ).unwrap();
         let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
         let hash_bytes = result_oid.as_bytes();
