@@ -50,6 +50,9 @@ struct Opts {
 
     #[clap(short, long)]
     prefix: String,
+
+    #[clap(long)]
+    amend: bool,
 }
 
 fn main()  {
@@ -57,7 +60,7 @@ fn main()  {
     let prefix = opts.prefix.as_str();
 
     let repo = Repository::discover(".").unwrap();
-    let head = repo.head().unwrap();
+    let mut head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let commit_message = commit.message().unwrap();
     let tree = commit.tree().unwrap();
@@ -69,10 +72,11 @@ fn main()  {
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
     loop {
+        let message = format!("{}\nNONCE {}", commit_message, i);
         let commit_buf = repo.commit_create_buffer(
             &signature,
             &signature,
-            &format!("{}\nNONCE {}", commit_message, i),
+            &message,
             &tree,
             &parents_refs,
         ).unwrap();
@@ -86,6 +90,13 @@ fn main()  {
             println!("{}", result_oid);
             let odb = repo.odb().unwrap();
             odb.write(ObjectType::Commit, &commit_buf).unwrap();
+            if opts.amend {
+                eprintln!("Replacing the latest commit with {}", result_oid);
+                head.set_target(
+                    result_oid,
+                    format!("git-miner moved from {}", commit.id()).as_str(),
+                ).unwrap();
+            }
             break;
         }
         i = i + 1;
