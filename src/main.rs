@@ -45,7 +45,7 @@ impl HashPrefixChecker {
 }
 
 #[derive(Clap)]
-#[clap(version="1.0", author="YS-L <liauys@gmail.com>")]
+#[clap(version="0.1.0", author="YS-L <liauys@gmail.com>")]
 struct Opts {
 
     #[clap(short, long)]
@@ -80,9 +80,10 @@ fn main()  {
         let hash_bytes = result_oid.as_bytes();
         if checker.check_prefix(&hash_bytes) {
             let elapsed = now.elapsed().unwrap();
-            println!("Found after {} tries! {}", i, result_oid);
-            println!("Time taken: {} s", elapsed.as_secs_f64());
-            println!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
+            eprintln!("Found after {} tries!", i);
+            eprintln!("Time taken: {} s", elapsed.as_secs_f64());
+            eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
+            println!("{}", result_oid);
             let odb = repo.odb().unwrap();
             odb.write(ObjectType::Commit, &commit_buf).unwrap();
             break;
