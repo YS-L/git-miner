@@ -1,10 +1,12 @@
+use clap::Clap;
 use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
 use git2::Buf;
 use std::time::SystemTime;
-use clap::Clap;
+use std::sync::mpsc::{channel, Sender, TryRecvError};
+use std::thread;
 
 struct HashPrefixChecker {
     bytes: Vec<u8>,
@@ -45,7 +47,7 @@ impl HashPrefixChecker {
 
 }
 
-fn mine_hash(prefix: &str) -> (i64, Oid, Buf) {
+fn mine_hash(tid: i64, tx: &Sender<(i64, Oid, String)>, prefix: String) {
 
     let repo = Repository::discover(".").unwrap();
     let head = repo.head().unwrap();
@@ -55,11 +57,11 @@ fn mine_hash(prefix: &str) -> (i64, Oid, Buf) {
     let signature = repo.signature().unwrap();
 
     let mut i: i64 = 1;
-    let checker = HashPrefixChecker::new(prefix);
+    let checker = HashPrefixChecker::new(prefix.as_str());
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
     loop {
-        let message = format!("{}\nNONCE {}", commit_message, i);
+        let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
         let commit_buf = repo.commit_create_buffer(
             &signature,
             &signature,
@@ -70,7 +72,8 @@ fn mine_hash(prefix: &str) -> (i64, Oid, Buf) {
         let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
         let hash_bytes = result_oid.as_bytes();
         if checker.check_prefix(&hash_bytes) {
-            return (i, result_oid, commit_buf)
+            println!("thread {} found!!", tid);
+            tx.send((i, result_oid, commit_buf.as_str().unwrap().to_owned())).unwrap();
         }
         i = i + 1;
     }
@@ -89,30 +92,54 @@ struct Opts {
 
 fn main()  {
     let opts: Opts = Opts::parse();
-    let prefix = opts.prefix.as_str();
+    let prefix = opts.prefix;
 
     let repo = Repository::discover(".").unwrap();
     let mut head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let now = SystemTime::now();
 
-    let (i, result_oid, commit_buf) = mine_hash(&prefix);
+    let (tx, rx) = channel();
 
-    let elapsed = now.elapsed().unwrap();
-    eprintln!("Found after {} tries!", i);
-    eprintln!("Time taken: {} s", elapsed.as_secs_f64());
-    eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
-    println!("{}", result_oid);
+    let n_threads = 4;
+    for i in 0..n_threads {
+        let tx = tx.clone();
+        let _prefix = prefix.clone();
+        thread::spawn(move|| {
+            mine_hash(i, &tx, _prefix);
+        });
+    }
 
-    let odb = repo.odb().unwrap();
-    odb.write(ObjectType::Commit, &commit_buf).unwrap();
+    loop {
+        match rx.try_recv() {
+            Ok((i, result_oid, commit_buf_string)) => {
+                let commit_buf = commit_buf_string.as_bytes();
 
-    if opts.amend {
-        eprintln!("Replacing the latest commit with {}", result_oid);
-        head.set_target(
-            result_oid,
-            format!("git-miner moved from {}", commit.id()).as_str(),
-        ).unwrap();
+                let elapsed = now.elapsed().unwrap();
+                eprintln!("Found after {} tries!", i);
+                eprintln!("Time taken: {} s", elapsed.as_secs_f64());
+                eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
+                println!("{}", result_oid);
+
+                let odb = repo.odb().unwrap();
+                odb.write(ObjectType::Commit, commit_buf).unwrap();
+
+                if opts.amend {
+                    eprintln!("Replacing the latest commit with {}", result_oid);
+                    head.set_target(
+                        result_oid,
+                        format!("git-miner moved from {}", commit.id()).as_str(),
+                    ).unwrap();
+                }
+                break;
+            },
+            Err(e) => {
+                if let TryRecvError::Disconnected = e {
+                    eprintln!("Thread exited");
+                }
+                continue;
+            },
+        }
     }
 }
 
