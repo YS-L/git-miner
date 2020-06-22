@@ -2,6 +2,7 @@ use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
+use git2::Buf;
 use std::time::SystemTime;
 use clap::Clap;
 
@@ -44,6 +45,37 @@ impl HashPrefixChecker {
 
 }
 
+fn mine_hash(prefix: &str) -> (i64, Oid, Buf) {
+
+    let repo = Repository::discover(".").unwrap();
+    let head = repo.head().unwrap();
+    let commit = head.peel_to_commit().unwrap();
+    let commit_message = commit.message().unwrap();
+    let tree = commit.tree().unwrap();
+    let signature = repo.signature().unwrap();
+
+    let mut i: i64 = 1;
+    let checker = HashPrefixChecker::new(prefix);
+    let parents: Vec<Commit> = commit.parents().collect();
+    let parents_refs: Vec<&Commit> = parents.iter().collect();
+    loop {
+        let message = format!("{}\nNONCE {}", commit_message, i);
+        let commit_buf = repo.commit_create_buffer(
+            &signature,
+            &signature,
+            &message,
+            &tree,
+            &parents_refs,
+        ).unwrap();
+        let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
+        let hash_bytes = result_oid.as_bytes();
+        if checker.check_prefix(&hash_bytes) {
+            return (i, result_oid, commit_buf)
+        }
+        i = i + 1;
+    }
+}
+
 #[derive(Clap)]
 #[clap(version="0.1.0", author="YS-L <liauys@gmail.com>")]
 struct Opts {
@@ -62,44 +94,25 @@ fn main()  {
     let repo = Repository::discover(".").unwrap();
     let mut head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
-    let commit_message = commit.message().unwrap();
-    let tree = commit.tree().unwrap();
-    let signature = repo.signature().unwrap();
-    let mut i: i64 = 1;
     let now = SystemTime::now();
 
-    let checker = HashPrefixChecker::new(prefix);
-    let parents: Vec<Commit> = commit.parents().collect();
-    let parents_refs: Vec<&Commit> = parents.iter().collect();
-    loop {
-        let message = format!("{}\nNONCE {}", commit_message, i);
-        let commit_buf = repo.commit_create_buffer(
-            &signature,
-            &signature,
-            &message,
-            &tree,
-            &parents_refs,
+    let (i, result_oid, commit_buf) = mine_hash(&prefix);
+
+    let elapsed = now.elapsed().unwrap();
+    eprintln!("Found after {} tries!", i);
+    eprintln!("Time taken: {} s", elapsed.as_secs_f64());
+    eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
+    println!("{}", result_oid);
+
+    let odb = repo.odb().unwrap();
+    odb.write(ObjectType::Commit, &commit_buf).unwrap();
+
+    if opts.amend {
+        eprintln!("Replacing the latest commit with {}", result_oid);
+        head.set_target(
+            result_oid,
+            format!("git-miner moved from {}", commit.id()).as_str(),
         ).unwrap();
-        let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
-        let hash_bytes = result_oid.as_bytes();
-        if checker.check_prefix(&hash_bytes) {
-            let elapsed = now.elapsed().unwrap();
-            eprintln!("Found after {} tries!", i);
-            eprintln!("Time taken: {} s", elapsed.as_secs_f64());
-            eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
-            println!("{}", result_oid);
-            let odb = repo.odb().unwrap();
-            odb.write(ObjectType::Commit, &commit_buf).unwrap();
-            if opts.amend {
-                eprintln!("Replacing the latest commit with {}", result_oid);
-                head.set_target(
-                    result_oid,
-                    format!("git-miner moved from {}", commit.id()).as_str(),
-                ).unwrap();
-            }
-            break;
-        }
-        i = i + 1;
     }
 }
 
