@@ -3,6 +3,7 @@ use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
 use std::time::SystemTime;
+use clap::Clap;
 
 struct HashPrefixChecker {
     bytes: Vec<u8>,
@@ -43,8 +44,19 @@ impl HashPrefixChecker {
 
 }
 
+#[derive(Clap)]
+#[clap(version="1.0", author="YS-L <liauys@gmail.com>")]
+struct Opts {
+
+    #[clap(short, long)]
+    prefix: String,
+}
+
 fn main()  {
-    let repo = Repository::discover("/home/liauys/Code/test-repo").unwrap();
+    let opts: Opts = Opts::parse();
+    let prefix = opts.prefix.as_str();
+
+    let repo = Repository::discover(".").unwrap();
     let head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let commit_message = commit.message().unwrap();
@@ -52,7 +64,7 @@ fn main()  {
     let signature = repo.signature().unwrap();
     let mut i: i64 = 1;
     let now = SystemTime::now();
-    let prefix = "00";
+
     let checker = HashPrefixChecker::new(prefix);
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
