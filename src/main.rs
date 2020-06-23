@@ -3,7 +3,6 @@ use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
-use git2::Buf;
 use std::time::SystemTime;
 use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::thread;
@@ -74,6 +73,7 @@ fn mine_hash(tid: i64, tx: &Sender<(i64, Oid, String)>, prefix: String) {
         if checker.check_prefix(&hash_bytes) {
             println!("thread {} found!!", tid);
             tx.send((i, result_oid, commit_buf.as_str().unwrap().to_owned())).unwrap();
+            break;
         }
         i = i + 1;
     }
