@@ -85,7 +85,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String) {
             break;
         }
         i = i + 1;
-        if n_sum >= 10000 {
+        if n_sum >= 100000 {
             tx.send(Message::Progress(n_sum)).unwrap();
             n_sum = 0;
         }
@@ -101,6 +101,9 @@ struct Opts {
 
     #[clap(long)]
     amend: bool,
+
+    #[clap(long, default_value="1")]
+    threads: String,
 }
 
 fn main()  {
@@ -114,7 +117,9 @@ fn main()  {
 
     let (tx, rx) = channel();
 
-    let n_threads = 4;
+
+    let n_threads = opts.threads.parse::<i64>().unwrap();
+    eprintln!("Using {} threads", n_threads);
     for i in 0..n_threads {
         let tx = tx.clone();
         let _prefix = prefix.clone();
