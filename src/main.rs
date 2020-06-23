@@ -46,7 +46,12 @@ impl HashPrefixChecker {
 
 }
 
-fn mine_hash(tid: i64, tx: &Sender<(i64, Oid, String)>, prefix: String) {
+enum Message {
+    Progress(i64),
+    Found((i64, Oid, String)),
+}
+
+fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String) {
 
     let repo = Repository::discover(".").unwrap();
     let head = repo.head().unwrap();
@@ -56,10 +61,12 @@ fn mine_hash(tid: i64, tx: &Sender<(i64, Oid, String)>, prefix: String) {
     let signature = repo.signature().unwrap();
 
     let mut i: i64 = 1;
+    let mut n_sum = 0;
     let checker = HashPrefixChecker::new(prefix.as_str());
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
     loop {
+        n_sum = n_sum + 1;
         let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
         let commit_buf = repo.commit_create_buffer(
             &signature,
@@ -72,10 +79,16 @@ fn mine_hash(tid: i64, tx: &Sender<(i64, Oid, String)>, prefix: String) {
         let hash_bytes = result_oid.as_bytes();
         if checker.check_prefix(&hash_bytes) {
             println!("thread {} found!!", tid);
-            tx.send((i, result_oid, commit_buf.as_str().unwrap().to_owned())).unwrap();
+            let buf = commit_buf.as_str().unwrap().to_owned();
+            let m = Message::Found((n_sum, result_oid, buf));
+            tx.send(m).unwrap();
             break;
         }
         i = i + 1;
+        if n_sum >= 10000 {
+            tx.send(Message::Progress(n_sum)).unwrap();
+            n_sum = 0;
+        }
     }
 }
 
@@ -110,15 +123,19 @@ fn main()  {
         });
     }
 
+    let mut n_hashed: i64 = 0;
     loop {
         match rx.try_recv() {
-            Ok((i, result_oid, commit_buf_string)) => {
+            Ok(Message::Found((i, result_oid, commit_buf_string))) => {
                 let commit_buf = commit_buf_string.as_bytes();
 
                 let elapsed = now.elapsed().unwrap();
-                eprintln!("Found after {} tries!", i);
+                n_hashed += i;
+                let time_per_hash = elapsed.as_secs_f64() / (n_hashed as f64);
+                eprintln!("Found after {} tries!", n_hashed);
                 eprintln!("Time taken: {} s", elapsed.as_secs_f64());
-                eprintln!("Time per hash: {} us", 1000000.0 * elapsed.as_secs_f64() / (i as f64));
+                eprintln!("Average time per hash: {} us", 1000000.0 * time_per_hash);
+
                 println!("{}", result_oid);
 
                 let odb = repo.odb().unwrap();
@@ -133,6 +150,9 @@ fn main()  {
                 }
                 break;
             },
+            Ok(Message::Progress(i)) => {
+                n_hashed += i;
+            }
             Err(e) => {
                 if let TryRecvError::Disconnected = e {
                     eprintln!("Thread exited");
