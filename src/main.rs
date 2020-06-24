@@ -3,7 +3,7 @@ use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::thread;
 
@@ -78,14 +78,13 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String) {
         let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
         let hash_bytes = result_oid.as_bytes();
         if checker.check_prefix(&hash_bytes) {
-            println!("thread {} found!!", tid);
             let buf = commit_buf.as_str().unwrap().to_owned();
             let m = Message::Found((n_sum, result_oid, buf));
             tx.send(m).unwrap();
             break;
         }
         i = i + 1;
-        if n_sum >= 100000 {
+        if n_sum >= 10000 {
             tx.send(Message::Progress(n_sum)).unwrap();
             n_sum = 0;
         }
@@ -104,6 +103,10 @@ struct Opts {
 
     #[clap(long, default_value="1")]
     threads: String,
+}
+
+fn get_time_since_epoch() -> u128 {
+    return SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
 }
 
 fn main()  {
@@ -129,6 +132,9 @@ fn main()  {
     }
 
     let mut n_hashed: i64 = 0;
+    let mut time_last_reported = get_time_since_epoch();
+    let mut prev_progress_len = 0;
+
     loop {
         match rx.try_recv() {
             Ok(Message::Found((i, result_oid, commit_buf_string))) => {
@@ -137,9 +143,9 @@ fn main()  {
                 let elapsed = now.elapsed().unwrap();
                 n_hashed += i;
                 let time_per_hash = elapsed.as_secs_f64() / (n_hashed as f64);
-                eprintln!("Found after {} tries!", n_hashed);
-                eprintln!("Time taken: {} s", elapsed.as_secs_f64());
-                eprintln!("Average time per hash: {} us", 1000000.0 * time_per_hash);
+                eprintln!("\nFound after {} tries!", n_hashed);
+                eprintln!("Time taken: {:.2} s", elapsed.as_secs_f64());
+                eprintln!("Average time per hash: {:.2} us", 1000000.0 * time_per_hash);
 
                 println!("{}", result_oid);
 
@@ -157,6 +163,20 @@ fn main()  {
             },
             Ok(Message::Progress(i)) => {
                 n_hashed += i;
+                let cur = get_time_since_epoch();
+                if (cur - time_last_reported) > 100 {
+                    let elapsed = now.elapsed().unwrap();
+                    let rate = 1000000.0 * elapsed.as_secs_f64() / (n_hashed as f64);
+                    let progress = format!(
+                        "Computed {} hashes. Effective rate = {:.2} us per hash",
+                        n_hashed,
+                        rate,
+                    );
+                    eprint!("\r{}", " ".repeat(prev_progress_len));
+                    eprint!("\r{}", progress);
+                    prev_progress_len = progress.len();
+                    time_last_reported = cur;
+                }
             }
             Err(e) => {
                 if let TryRecvError::Disconnected = e {
