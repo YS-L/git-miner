@@ -51,9 +51,9 @@ enum Message {
     Found((i64, Oid, String)),
 }
 
-fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String) {
+fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) {
 
-    let repo = Repository::discover(".").unwrap();
+    let repo = Repository::discover(repo_path).unwrap();
     let head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let commit_message = commit.message().unwrap();
@@ -103,6 +103,9 @@ struct Opts {
 
     #[clap(long, default_value="1")]
     threads: String,
+
+    #[clap(long, default_value=".")]
+    repo: String
 }
 
 fn get_time_since_epoch() -> u128 {
@@ -112,22 +115,23 @@ fn get_time_since_epoch() -> u128 {
 fn main()  {
     let opts: Opts = Opts::parse();
     let prefix = opts.prefix;
+    let repo_path = opts.repo;
 
-    let repo = Repository::discover(".").unwrap();
+    let repo = Repository::discover(repo_path.as_str()).unwrap();
     let mut head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let now = SystemTime::now();
 
     let (tx, rx) = channel();
 
-
     let n_threads = opts.threads.parse::<i64>().unwrap();
     eprintln!("Using {} threads", n_threads);
     for i in 0..n_threads {
         let tx = tx.clone();
         let _prefix = prefix.clone();
+        let _repo_path = repo_path.clone();
         thread::spawn(move|| {
-            mine_hash(i, &tx, _prefix);
+            mine_hash(i, &tx, _prefix, _repo_path);
         });
     }
 
