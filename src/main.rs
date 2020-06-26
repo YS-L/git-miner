@@ -97,10 +97,14 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         n_sum = n_sum + 1;
         let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
 
-        let commit_data = format!("{}{}", fixed_commit_data, message);
-
         // TODO: test with unicode message
-        let full_commit_data = format!("commit {}\0{}", commit_data.len(), commit_data);
+        let full_commit_data = format!(
+            "commit {}\0{}{}",
+            fixed_commit_data.len() + message.len(),
+            fixed_commit_data,
+            message,
+        );
+
         let mut sh = Sha1::default();
         sh.update(full_commit_data.as_bytes());
         let res_bytes = sh.finalize();
