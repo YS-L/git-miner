@@ -84,19 +84,21 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         time.offset_minutes() % 60,
     ).as_str();
 
+    // TODO: handle multiple parents
+    let fixed_commit_data = format!(
+        "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n",
+        tree.id(),
+        parents.get(0).unwrap().id(),
+        author_data.as_str(),
+        author_data.as_str(),
+    );
+
     loop {
         n_sum = n_sum + 1;
         let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
 
-        // TODO: handle multiple parents
-        let commit_data = format!(
-            "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n{}",
-            tree.id(),
-            parents.get(0).unwrap().id(),
-            author_data.as_str(),
-            author_data.as_str(),
-            message,
-        );
+        let commit_data = format!("{}{}", fixed_commit_data, message);
+
         // TODO: test with unicode message
         let full_commit_data = format!("commit {}\0{}", commit_data.len(), commit_data);
         let mut sh = Sha1::default();
