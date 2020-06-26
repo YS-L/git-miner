@@ -4,7 +4,7 @@ use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::sync::mpsc::{channel, Sender, TryRecvError};
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use sha1::{Digest, Sha1};
 
@@ -181,9 +181,9 @@ fn main()  {
     let mut time_last_reported = get_time_since_epoch();
     let mut prev_progress_len = 0;
 
-    loop {
-        match rx.try_recv() {
-            Ok(Message::Found((i, result_oid, commit_buf_string))) => {
+    for m in rx.iter() {
+        match m {
+            Message::Found((i, result_oid, commit_buf_string)) => {
                 let commit_buf = commit_buf_string.as_bytes();
 
                 let elapsed = now.elapsed().unwrap();
@@ -207,7 +207,7 @@ fn main()  {
                 }
                 break;
             },
-            Ok(Message::Progress(i)) => {
+            Message::Progress(i) => {
                 n_hashed += i;
                 let cur = get_time_since_epoch();
                 if (cur - time_last_reported) > 100 {
@@ -224,11 +224,6 @@ fn main()  {
                     time_last_reported = cur;
                 }
             }
-            Err(e) => {
-                if let TryRecvError::Disconnected = e {
-                    eprintln!("Thread exited");
-                }
-            },
         }
     }
 }
