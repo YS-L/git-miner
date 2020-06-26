@@ -102,7 +102,6 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         let mut sh = Sha1::default();
         sh.update(full_commit_data.as_bytes());
         let res_bytes = sh.finalize();
-        let res_oid = Oid::from_bytes(&res_bytes).unwrap();
 
         if checker.check_prefix(&res_bytes) {
             let commit_buf = repo.commit_create_buffer(
@@ -114,9 +113,10 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
             ).unwrap();
 
             // verify sha1 is done correctly
+            let res_oid = Oid::from_bytes(&res_bytes).unwrap();
             let git_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
-            //let git_bytes = result_oid.as_bytes();
-            if format!("{}", git_oid) != format!("{}", res_oid) {
+            let git_bytes = git_oid.as_bytes();
+            if git_bytes != &res_bytes[..] {
                 panic!("Commit's hash is not the same as the SHA1 hash!")
             }
 
