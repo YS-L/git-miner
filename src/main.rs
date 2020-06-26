@@ -6,6 +6,7 @@ use git2::Commit;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::thread;
+use sha1::{Digest, Sha1};
 
 struct HashPrefixChecker {
     bytes: Vec<u8>,
@@ -65,21 +66,62 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
     let checker = HashPrefixChecker::new(prefix.as_str());
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
+
+    let time = signature.when();
+    let mut author_data = String::from("");
+    // TODO: test without name / email
+    if let Some(name) = signature.name() {
+        author_data += format!(" {}", name).as_str();
+    }
+    if let Some(email) = signature.email() {
+        author_data += format!(" <{}>", email).as_str();
+    }
+    author_data += format!(" {}", time.seconds()).as_str();
+    // TODO: handle -ve time zone
+    author_data += format!(
+        " +{:02}{:02}",
+        time.offset_minutes() / 60,
+        time.offset_minutes() % 60,
+    ).as_str();
+
     loop {
         n_sum = n_sum + 1;
         let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
-        let commit_buf = repo.commit_create_buffer(
-            &signature,
-            &signature,
-            &message,
-            &tree,
-            &parents_refs,
-        ).unwrap();
-        let result_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
-        let hash_bytes = result_oid.as_bytes();
-        if checker.check_prefix(&hash_bytes) {
+
+        // TODO: handle multiple parents
+        let commit_data = format!(
+            "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n{}",
+            tree.id(),
+            parents.get(0).unwrap().id(),
+            author_data.as_str(),
+            author_data.as_str(),
+            message,
+        );
+        // TODO: test with unicode message
+        let full_commit_data = format!("commit {}\0{}", commit_data.len(), commit_data);
+        let mut sh = Sha1::default();
+        sh.update(full_commit_data.as_bytes());
+        let res_bytes = sh.finalize();
+        let res_oid = Oid::from_bytes(&res_bytes).unwrap();
+
+        if checker.check_prefix(&res_bytes) {
+            let commit_buf = repo.commit_create_buffer(
+                &signature,
+                &signature,
+                &message,
+                &tree,
+                &parents_refs,
+            ).unwrap();
+
+            // verify sha1 is done correctly
+            let git_oid = Oid::hash_object(ObjectType::Commit, &commit_buf).unwrap();
+            //let git_bytes = result_oid.as_bytes();
+            if format!("{}", git_oid) != format!("{}", res_oid) {
+                panic!("Commit's hash is not the same as the SHA1 hash!")
+            }
+
             let buf = commit_buf.as_str().unwrap().to_owned();
-            let m = Message::Found((n_sum, result_oid, buf));
+            let m = Message::Found((n_sum, res_oid, buf));
             tx.send(m).unwrap();
             break;
         }
@@ -186,7 +228,6 @@ fn main()  {
                 if let TryRecvError::Disconnected = e {
                     eprintln!("Thread exited");
                 }
-                continue;
             },
         }
     }
