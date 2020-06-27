@@ -86,30 +86,52 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
 
     // TODO: handle multiple parents
     let fixed_commit_data = format!(
-        "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n",
+        "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n{}",
         tree.id(),
         parents.get(0).unwrap().id(),
         author_data.as_str(),
         author_data.as_str(),
+        commit_message,
+    );
+
+    let chars = vec![
+        [0x20, 0x20, 0x20],
+        [0xc2, 0xa0, 0x20],
+        [0xe1, 0xa0, 0x8e],
+        [0xe2, 0x80, 0x80],
+        [0xe2, 0x80, 0x81],
+        [0xe2, 0x80, 0x82],
+        [0xe2, 0x80, 0x83],
+        [0xe2, 0x80, 0x84],
+        [0xe2, 0x80, 0x85],
+        [0xe2, 0x80, 0x86],
+        [0xe2, 0x80, 0x87],
+        [0xe2, 0x80, 0x88],
+        [0xe2, 0x80, 0x89],
+        [0xe2, 0x80, 0x8a],
+        [0xe2, 0x80, 0x8b],
+        [0xe2, 0x80, 0xaf],
+    ];
+    let nonce_len = 3 * 20;
+    let mut nonce_bytes = vec![0x20; nonce_len];
+
+    let all_except_nonce = format!(
+        "commit {}\0{}",
+        fixed_commit_data.len() + nonce_len,
+        fixed_commit_data,
     );
 
     loop {
         n_sum = n_sum + 1;
-        let message = format!("{}\nNONCE {}:{}", commit_message, tid, i);
-
-        // TODO: test with unicode message
-        let full_commit_data = format!(
-            "commit {}\0{}{}",
-            fixed_commit_data.len() + message.len(),
-            fixed_commit_data,
-            message,
-        );
 
         let mut sh = Sha1::default();
-        sh.update(full_commit_data.as_bytes());
+        sh.update(all_except_nonce.as_bytes());
+        sh.update(&nonce_bytes);
         let res_bytes = sh.finalize();
 
         if checker.check_prefix(&res_bytes) {
+            let nonce = String::from_utf8(nonce_bytes.clone()).unwrap();
+            let message = format!("{}{}", commit_message, nonce.as_str());
             let commit_buf = repo.commit_create_buffer(
                 &signature,
                 &signature,
@@ -130,6 +152,13 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
             let m = Message::Found((n_sum, res_oid, buf));
             tx.send(m).unwrap();
             break;
+        }
+        else {
+            for (i, byte) in res_bytes.iter().enumerate() {
+                for (j, x) in chars[(byte & 0x0f) as usize].iter().enumerate() {
+                    nonce_bytes[i*3 + j] = *x;
+                }
+            }
         }
         i = i + 1;
         if n_sum >= 10000 {
