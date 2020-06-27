@@ -121,13 +121,15 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         fixed_commit_data,
     );
 
+    let mut sh = Sha1::default();
+    sh.update(all_except_nonce.as_bytes());
+
     loop {
         n_sum = n_sum + 1;
 
-        let mut sh = Sha1::default();
-        sh.update(all_except_nonce.as_bytes());
-        sh.update(&nonce_bytes);
-        let res_bytes = sh.finalize();
+        let mut _sh = sh.clone();
+        _sh.update(&nonce_bytes);
+        let res_bytes = _sh.finalize();
 
         if checker.check_prefix(&res_bytes) {
             let nonce = String::from_utf8(nonce_bytes.clone()).unwrap();
