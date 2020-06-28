@@ -129,9 +129,14 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
 
         let mut _sh = sh.clone();
         _sh.update(&nonce_bytes);
+        if i == 1 {
+            // Inject something thread specific so that each thread can explore a different path.
+            // But this also means that the first hash will not be valid.
+            _sh.update(format!("{}", tid).as_bytes());
+        }
         let res_bytes = _sh.finalize();
 
-        if checker.check_prefix(&res_bytes) {
+        if i > 1 && checker.check_prefix(&res_bytes) {
             let nonce = String::from_utf8(nonce_bytes.clone()).unwrap();
             let message = format!("{}{}", commit_message, nonce.as_str());
             let commit_buf = repo.commit_create_buffer(
@@ -156,6 +161,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
             break;
         }
         else {
+            // Use the current sha to determine what the next nonce bytes are
             for (i, byte) in res_bytes.iter().enumerate() {
                 for (j, x) in chars[(byte & 0x0f) as usize].iter().enumerate() {
                     nonce_bytes[i*3 + j] = *x;
