@@ -99,10 +99,10 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         commit_message,
     );
 
+    // A bunch of unicode spaces :-)
     let chars = vec![
         [0x20, 0x20, 0x20],
         [0xc2, 0xa0, 0x20],
-        [0xe1, 0xa0, 0x8e],
         [0xe2, 0x80, 0x80],
         [0xe2, 0x80, 0x81],
         [0xe2, 0x80, 0x82],
@@ -116,6 +116,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         [0xe2, 0x80, 0x8a],
         [0xe2, 0x80, 0x8b],
         [0xe2, 0x80, 0xaf],
+        [0xe2, 0x81, 0x9f],
     ];
     let nonce_len = 3 * 20;
     let mut nonce_bytes = vec![0x20; nonce_len];
