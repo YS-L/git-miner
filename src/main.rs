@@ -84,11 +84,16 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         time.offset_minutes() % 60,
     ).as_str();
 
-    // TODO: handle multiple parents
+    let parents_data = parents
+                       .iter()
+                       .map(|x| format!("parent {}", x.id()))
+                       .collect::<Vec<String>>()
+                       .join("\n");
+
     let fixed_commit_data = format!(
-        "tree {}\nparent {}\nauthor{}\ncommitter{}\n\n{}",
+        "tree {}\n{}\nauthor{}\ncommitter{}\n\n{}",
         tree.id(),
-        parents.get(0).unwrap().id(),
+        parents_data.as_str(),
         author_data.as_str(),
         author_data.as_str(),
         commit_message,
