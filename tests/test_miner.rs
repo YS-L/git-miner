@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::process::{Command, Output};
 use std::str;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 
@@ -59,16 +59,15 @@ impl GitRepo {
 
 }
 
-
-#[test]
-fn simple_prefix() {
-
-    let temp_dir = TempDir::new().unwrap();
-    let repo = GitRepo::new(temp_dir.path().to_path_buf());
+fn make_simple_repo(temp_dir: &Path) -> GitRepo {
+    let repo = GitRepo::new(temp_dir.to_path_buf());
     repo.add_and_commit("a.txt", "Something A");
     repo.add_and_commit("b.txt", "Something B");
     repo.add_and_commit("c.txt", "Something C");
+    return repo;
+}
 
+fn run_git_miner(repo_path: &Path, args: &[&str]) {
     let mut root = env::current_exe()
                        .unwrap()
                        .parent()
@@ -78,15 +77,21 @@ fn simple_prefix() {
         root.pop();
     }
     let git_miner_bin = root.join("git-miner");
+    Command::new(git_miner_bin)
+            .current_dir(repo_path)
+            .args(args)
+            .output()
+            .unwrap();
+}
 
-    let _res = Command::new(git_miner_bin)
-                       .current_dir(&temp_dir.path())
-                       .args(&["--prefix", "000", "--amend"])
-                       .output()
-                       .unwrap();
+#[test]
+fn mine_and_replace() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let repo = make_simple_repo(&repo_path);
+
+    run_git_miner(&repo_path, &["--prefix", "000", "--amend"]);
 
     let latest_commit_sha = repo.latest_commit_sha();
-
     assert!(&latest_commit_sha[..3] == "000");
-
 }
