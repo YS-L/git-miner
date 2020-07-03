@@ -32,6 +32,10 @@ impl GitRepo {
         self.git(&["commit", "-m", message]);
     }
 
+    pub fn checkout(&self, git_ref: &str) {
+        self.git(&["checkout", git_ref]);
+    }
+
     pub fn status(&self) {
         println!("{}", &self.git_output(&["status"]));
     }
@@ -67,7 +71,7 @@ fn make_simple_repo(temp_dir: &Path) -> GitRepo {
     return repo;
 }
 
-fn run_git_miner(repo_path: &Path, args: &[&str]) {
+fn run_git_miner(repo_path: &Path, args: &[&str]) -> Output {
     let mut root = env::current_exe()
                        .unwrap()
                        .parent()
@@ -77,11 +81,31 @@ fn run_git_miner(repo_path: &Path, args: &[&str]) {
         root.pop();
     }
     let git_miner_bin = root.join("git-miner");
-    Command::new(git_miner_bin)
-            .current_dir(repo_path)
-            .args(args)
-            .output()
-            .unwrap();
+    let out = Command::new(git_miner_bin)
+                      .current_dir(repo_path)
+                      .args(args)
+                      .output()
+                      .unwrap();
+    return out;
+}
+
+#[test]
+fn mine_only() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let repo = make_simple_repo(&repo_path);
+    let current_sha = repo.latest_commit_sha();
+
+    // Created object's SHA will be in stdout
+    let out = run_git_miner(&repo_path, &["--prefix", "000"]);
+    let out_sha = &str::from_utf8(&out.stdout[..]).unwrap()[..8];
+
+    let latest_commit_sha = repo.latest_commit_sha();
+    assert!(latest_commit_sha == current_sha);
+
+    repo.checkout(out_sha);
+    let latest_commit_sha = repo.latest_commit_sha();
+    assert!(&latest_commit_sha[..3] == "000");
 }
 
 #[test]
