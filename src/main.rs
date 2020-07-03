@@ -40,7 +40,7 @@ impl HashPrefixChecker {
         let last_expected = *(self.bytes.last().unwrap());
         let last = *(bytes.get(self.bytes.len() - 1).unwrap());
         if self.is_odd_length {
-            return last_expected == (last & 0b11110000)
+            return last_expected == (last & 0b1111_0000)
         }
         last_expected == last
     }
@@ -131,7 +131,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
     sh.update(all_except_nonce.as_bytes());
 
     loop {
-        n_sum = n_sum + 1;
+        n_sum += 1;
 
         let mut _sh = sh.clone();
         _sh.update(&nonce_bytes);
@@ -143,7 +143,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         let res_bytes = _sh.finalize();
 
         if i > 1 && checker.check_prefix(&res_bytes) {
-            let nonce = String::from_utf8(nonce_bytes.clone()).unwrap();
+            let nonce = String::from_utf8(nonce_bytes).unwrap();
             let message = format!("{}{}", commit_message, nonce.as_str());
             let commit_buf = repo.commit_create_buffer(
                 &signature,
@@ -174,7 +174,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
                 }
             }
         }
-        i = i + 1;
+        i += 1;
         if n_sum >= 10000 {
             tx.send(Message::Progress(n_sum)).unwrap();
             n_sum = 0;
@@ -200,7 +200,7 @@ struct Opts {
 }
 
 fn get_time_since_epoch() -> u128 {
-    return SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
 }
 
 fn main()  {
@@ -240,7 +240,7 @@ fn main()  {
                 let time_per_hash = elapsed.as_secs_f64() / (n_hashed as f64);
                 eprintln!("\nFound after {} tries!", n_hashed);
                 eprintln!("Time taken: {:.2} s", elapsed.as_secs_f64());
-                eprintln!("Average time per hash: {:.2} us", 1000000.0 * time_per_hash);
+                eprintln!("Average time per hash: {:.2} us", 1_000_000.0 * time_per_hash);
 
                 println!("{}", result_oid);
 
@@ -261,7 +261,7 @@ fn main()  {
                 let cur = get_time_since_epoch();
                 if (cur - time_last_reported) > 100 {
                     let elapsed = now.elapsed().unwrap();
-                    let rate = 1000000.0 * elapsed.as_secs_f64() / (n_hashed as f64);
+                    let rate = 1_000_000.0 * elapsed.as_secs_f64() / (n_hashed as f64);
                     let progress = format!(
                         "Computed {} hashes. Effective rate = {:.2} us per hash",
                         n_hashed,
