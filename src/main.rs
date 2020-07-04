@@ -169,9 +169,8 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         else {
             // Use the current sha to determine what the next nonce bytes are
             for (i, byte) in res_bytes.iter().enumerate() {
-                for (j, x) in chars[(byte & 0x0f) as usize].iter().enumerate() {
-                    nonce_bytes[i*3 + j] = *x;
-                }
+                let j = (byte & 0x0f) as usize;
+                nonce_bytes[i*3..i*3+3].copy_from_slice(&chars[j][..]);
             }
         }
         i += 1;
@@ -240,7 +239,7 @@ fn main()  {
                 let time_per_hash = elapsed.as_secs_f64() / (n_hashed as f64);
                 eprintln!("\nFound after {} tries!", n_hashed);
                 eprintln!("Time taken: {:.2} s", elapsed.as_secs_f64());
-                eprintln!("Average time per hash: {:.2} us", 1_000_000.0 * time_per_hash);
+                eprintln!("Average time per hash: {:.3} us", 1_000_000.0 * time_per_hash);
 
                 println!("{}", result_oid);
 
@@ -263,7 +262,7 @@ fn main()  {
                     let elapsed = now.elapsed().unwrap();
                     let rate = 1_000_000.0 * elapsed.as_secs_f64() / (n_hashed as f64);
                     let progress = format!(
-                        "Computed {} hashes. Effective rate = {:.2} us per hash",
+                        "Computed {} hashes. Effective rate = {:.3} us per hash",
                         n_hashed,
                         rate,
                     );
