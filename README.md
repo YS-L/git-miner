@@ -1,9 +1,10 @@
 # git-miner
-git-miner mines a commit SHA that has the given prefix
+git-miner mines a commit SHA that has the given prefix.
 
 ## Usage
 
-This command produces a new commit object with the desired prefix:
+This command produces a new commit object based on the latest commit, such
+that it has a commit SHA that matches the given prefix:
 
 ```bash
 git-miner --prefix 000000 --threads 8
@@ -25,7 +26,8 @@ If you wish `git-miner` to replace the latest commit with this new commit
 automatically, you can specify the `--amend` flag.
 
 ## Example
-For kicks, this repository has decided to make its commit SHAs monotonically
+For kicks, this repository has decided to make its [commit
+SHAs](https://github.com/YS-L/git-miner/commits/master) monotonically
 increasing starting from 0000001 (when viewing just the first 7 bytes, of
 course). This is the post commit hook:
 
@@ -35,7 +37,7 @@ course). This is the post commit hook:
 git-miner --prefix $(printf "%07d\n" $(git rev-list --count HEAD)) --threads=8 --amend
 ```
 
-## Install
+## Installation
 Install from source:
 ```
 cargo install --path $(pwd)
