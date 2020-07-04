@@ -107,20 +107,21 @@ fn mine_hash(
     let author_data = format_signature_data(&author_signature);
     let committer_data = format_signature_data(&committer_signature);
 
-    let parents_data = parents
-                       .iter()
-                       .map(|x| format!("parent {}", x.id()))
-                       .collect::<Vec<String>>()
-                       .join("\n");
-
-    let fixed_commit_data = format!(
-        "tree {}\n{}\nauthor{}\ncommitter{}\n\n{}",
-        tree.id(),
-        parents_data.as_str(),
-        author_data.as_str(),
-        committer_data.as_str(),
-        commit_message,
-    );
+    // Form the parts of commit data that will not change
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("tree {}", tree.id()));
+    if !parents.is_empty() {
+        let parents_data = parents
+                           .iter()
+                           .map(|x| format!("parent {}", x.id()))
+                           .collect::<Vec<String>>()
+                           .join("\n");
+        parts.push(parents_data);
+    }
+    parts.push(format!("author{}", author_data.as_str()));
+    parts.push(format!("committer{}", committer_data.as_str()));
+    parts.push(format!("\n{}", commit_message));
+    let fixed_commit_data = parts.join("\n");
 
     // A bunch of unicode spaces :-)
     let chars = vec![

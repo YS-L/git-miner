@@ -119,3 +119,16 @@ fn mine_and_replace() {
     let latest_commit_sha = repo.latest_commit_sha();
     assert!(&latest_commit_sha[..3] == "000");
 }
+
+#[test]
+fn mine_initial_commit() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let repo = GitRepo::new(repo_path.to_path_buf());
+    repo.add_and_commit("a.txt", "Initial commit");
+
+    run_git_miner(&repo_path, &["--prefix", "000", "--amend"]);
+
+    let latest_commit_sha = repo.latest_commit_sha();
+    assert!(&latest_commit_sha[..3] == "000");
+}
