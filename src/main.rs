@@ -3,6 +3,7 @@ use git2::Repository;
 use git2::ObjectType;
 use git2::Oid;
 use git2::Commit;
+use git2::Signature;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
@@ -52,14 +53,43 @@ enum Message {
     Found((i64, Oid, String)),
 }
 
-fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) {
+fn format_signature_data(signature: &Signature) -> String {
+
+    let mut data = String::from("");
+
+    // TODO: test without name / email
+    if let Some(name) = signature.name() {
+        data += format!(" {}", name).as_str();
+    }
+    if let Some(email) = signature.email() {
+        data += format!(" <{}>", email).as_str();
+    }
+
+    // TODO: handle -ve time zone
+    let time = signature.when();
+    data += format!(" {}", time.seconds()).as_str();
+    data += format!(
+        " +{:02}{:02}",
+        time.offset_minutes() / 60,
+        time.offset_minutes() % 60,
+    ).as_str();
+
+    data
+}
+
+fn mine_hash(
+    tid: i64,
+    tx: &Sender<Message>,
+    prefix: String,
+    repo_path: String,
+    reset_author: bool,
+) {
 
     let repo = Repository::discover(repo_path).unwrap();
     let head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
     let commit_message = commit.message().unwrap();
     let tree = commit.tree().unwrap();
-    let signature = repo.signature().unwrap();
 
     let mut i: i64 = 1;
     let mut n_sum = 0;
@@ -67,22 +97,15 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
     let parents: Vec<Commit> = commit.parents().collect();
     let parents_refs: Vec<&Commit> = parents.iter().collect();
 
-    let time = signature.when();
-    let mut author_data = String::from("");
-    // TODO: test without name / email
-    if let Some(name) = signature.name() {
-        author_data += format!(" {}", name).as_str();
+    let mut author_signature = commit.author();
+    let committer_signature = commit.committer();
+
+    if reset_author {
+        author_signature = repo.signature().unwrap();
     }
-    if let Some(email) = signature.email() {
-        author_data += format!(" <{}>", email).as_str();
-    }
-    author_data += format!(" {}", time.seconds()).as_str();
-    // TODO: handle -ve time zone
-    author_data += format!(
-        " +{:02}{:02}",
-        time.offset_minutes() / 60,
-        time.offset_minutes() % 60,
-    ).as_str();
+
+    let author_data = format_signature_data(&author_signature);
+    let committer_data = format_signature_data(&committer_signature);
 
     let parents_data = parents
                        .iter()
@@ -95,7 +118,7 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
         tree.id(),
         parents_data.as_str(),
         author_data.as_str(),
-        author_data.as_str(),
+        committer_data.as_str(),
         commit_message,
     );
 
@@ -146,8 +169,8 @@ fn mine_hash(tid: i64, tx: &Sender<Message>, prefix: String, repo_path: String) 
             let nonce = String::from_utf8(nonce_bytes).unwrap();
             let message = format!("{}{}", commit_message, nonce.as_str());
             let commit_buf = repo.commit_create_buffer(
-                &signature,
-                &signature,
+                &author_signature,
+                &committer_signature,
                 &message,
                 &tree,
                 &parents_refs,
@@ -191,6 +214,9 @@ struct Opts {
     #[clap(long)]
     amend: bool,
 
+    #[clap(long)]
+    reset_author: bool,
+
     #[clap(long, default_value="1")]
     threads: String,
 
@@ -206,6 +232,7 @@ fn main()  {
     let opts: Opts = Opts::parse();
     let prefix = opts.prefix;
     let repo_path = opts.repo;
+    let reset_author = opts.reset_author;
 
     let repo = Repository::discover(repo_path.as_str()).unwrap();
     let mut head = repo.head().unwrap();
@@ -221,7 +248,7 @@ fn main()  {
         let _prefix = prefix.clone();
         let _repo_path = repo_path.clone();
         thread::spawn(move|| {
-            mine_hash(i, &tx, _prefix, _repo_path);
+            mine_hash(i, &tx, _prefix, _repo_path, reset_author);
         });
     }
 
