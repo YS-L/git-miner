@@ -1,6 +1,9 @@
 # git-miner
 git-miner mines a commit SHA that has the given prefix.
 
+It does so by inserting a series of invisible spaces at the end of the commit
+message.
+
 ## Usage
 
 This command produces a new commit object based on the latest commit, such
@@ -27,14 +30,14 @@ automatically, you can specify the `--amend` flag.
 
 ## Example
 For kicks, this repository has decided to make its [commit
-SHAs](https://github.com/YS-L/git-miner/commits/master) monotonically
-increasing starting from 0000001 (when viewing just the first 7 bytes, of
-course). This is the post commit hook:
+SHAs](https://github.com/YS-L/git-miner/commits/master) be always increasing
+starting from 0000001 (when viewing just the first 7 bytes, of course). This
+is the post commit hook:
 
 ```shell
 #!/bin/bash
 
-git-miner --prefix $(printf "%07d\n" $(git rev-list --count HEAD)) --threads=8 --amend
+git-miner --prefix $(printf "%07d" $(git rev-list --count HEAD)) --threads=8 --amend
 ```
 
 ## Installation
