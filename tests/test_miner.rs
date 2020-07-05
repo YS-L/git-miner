@@ -1,18 +1,16 @@
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::str;
-use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-
 
 struct GitRepo {
     dir: PathBuf,
 }
 
 impl GitRepo {
-
     pub fn new(repo_dir: PathBuf) -> GitRepo {
         let repo = GitRepo { dir: repo_dir };
         repo.git(&["init"]);
@@ -47,12 +45,18 @@ impl GitRepo {
     fn git(&self, args: &[&str]) -> Output {
         println!("---- Running git command: {:?} ----", args);
         let res = Command::new("git")
-                          .current_dir(&self.dir)
-                          .args(args)
-                          .output()
-                          .expect("git error");
-        println!("\tgit stdout:\n{}", str::from_utf8(res.stdout.as_slice()).unwrap());
-        println!("\tgit stderr:\n{}", str::from_utf8(res.stderr.as_slice()).unwrap());
+            .current_dir(&self.dir)
+            .args(args)
+            .output()
+            .expect("git error");
+        println!(
+            "\tgit stdout:\n{}",
+            str::from_utf8(res.stdout.as_slice()).unwrap()
+        );
+        println!(
+            "\tgit stderr:\n{}",
+            str::from_utf8(res.stderr.as_slice()).unwrap()
+        );
         return res;
     }
 
@@ -60,7 +64,6 @@ impl GitRepo {
         let output = self.git(args);
         return format!("{}", str::from_utf8(output.stdout.as_slice()).unwrap());
     }
-
 }
 
 fn make_simple_repo(temp_dir: &Path) -> GitRepo {
@@ -73,19 +76,19 @@ fn make_simple_repo(temp_dir: &Path) -> GitRepo {
 
 fn run_git_miner(repo_path: &Path, args: &[&str]) -> Output {
     let mut root = env::current_exe()
-                       .unwrap()
-                       .parent()
-                       .expect("failed to get exe directory")
-                       .to_path_buf();
+        .unwrap()
+        .parent()
+        .expect("failed to get exe directory")
+        .to_path_buf();
     if root.ends_with("deps") {
         root.pop();
     }
     let git_miner_bin = root.join("git-miner");
     let out = Command::new(git_miner_bin)
-                      .current_dir(repo_path)
-                      .args(args)
-                      .output()
-                      .unwrap();
+        .current_dir(repo_path)
+        .args(args)
+        .output()
+        .unwrap();
     return out;
 }
 

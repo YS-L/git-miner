@@ -1,13 +1,13 @@
 use clap::Clap;
-use git2::Repository;
+use git2::Commit;
 use git2::ObjectType;
 use git2::Oid;
-use git2::Commit;
+use git2::Repository;
 use git2::Signature;
-use std::time::{SystemTime, UNIX_EPOCH};
+use sha1::{Digest, Sha1};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
-use sha1::{Digest, Sha1};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 struct HashPrefixChecker {
     bytes: Vec<u8>,
@@ -15,7 +15,6 @@ struct HashPrefixChecker {
 }
 
 impl HashPrefixChecker {
-
     fn new(prefix: &str) -> HashPrefixChecker {
         if prefix == "" {
             panic!("Prefix is empty");
@@ -29,23 +28,25 @@ impl HashPrefixChecker {
             _s.push_str("0");
         }
         let bytes = hex::decode(_s.as_str()).unwrap();
-        HashPrefixChecker { bytes, is_odd_length }
+        HashPrefixChecker {
+            bytes,
+            is_odd_length,
+        }
     }
 
     fn check_prefix(&self, bytes: &[u8]) -> bool {
         for i in 0..self.bytes.len() - 1 {
             if self.bytes.get(i).unwrap() != bytes.get(i).unwrap() {
-                return false
+                return false;
             }
         }
         let last_expected = *(self.bytes.last().unwrap());
         let last = *(bytes.get(self.bytes.len() - 1).unwrap());
         if self.is_odd_length {
-            return last_expected == (last & 0b1111_0000)
+            return last_expected == (last & 0b1111_0000);
         }
         last_expected == last
     }
-
 }
 
 enum Message {
@@ -54,7 +55,6 @@ enum Message {
 }
 
 fn format_signature_data(signature: &Signature) -> String {
-
     let mut data = String::from("");
 
     // TODO: test without name / email
@@ -72,7 +72,8 @@ fn format_signature_data(signature: &Signature) -> String {
         " +{:02}{:02}",
         time.offset_minutes() / 60,
         time.offset_minutes() % 60,
-    ).as_str();
+    )
+    .as_str();
 
     data
 }
@@ -84,7 +85,6 @@ fn mine_hash(
     repo_path: String,
     reset_author: bool,
 ) {
-
     let repo = Repository::discover(repo_path).unwrap();
     let head = repo.head().unwrap();
     let commit = head.peel_to_commit().unwrap();
@@ -112,10 +112,10 @@ fn mine_hash(
     parts.push(format!("tree {}", tree.id()));
     if !parents.is_empty() {
         let parents_data = parents
-                           .iter()
-                           .map(|x| format!("parent {}", x.id()))
-                           .collect::<Vec<String>>()
-                           .join("\n");
+            .iter()
+            .map(|x| format!("parent {}", x.id()))
+            .collect::<Vec<String>>()
+            .join("\n");
         parts.push(parents_data);
     }
     parts.push(format!("author{}", author_data.as_str()));
@@ -125,22 +125,22 @@ fn mine_hash(
 
     // A bunch of unicode spaces :-)
     let chars = vec![
-        [0x20, 0x20, 0x20],  // U+0020
-        [0xc2, 0xa0, 0x20],  // U+00A0
-        [0xe2, 0x80, 0x80],  // U+2000
-        [0xe2, 0x80, 0x81],  // U+2001
-        [0xe2, 0x80, 0x82],  // U+2002
-        [0xe2, 0x80, 0x83],  // U+2003
-        [0xe2, 0x80, 0x84],  // ...
+        [0x20, 0x20, 0x20], // U+0020
+        [0xc2, 0xa0, 0x20], // U+00A0
+        [0xe2, 0x80, 0x80], // U+2000
+        [0xe2, 0x80, 0x81], // U+2001
+        [0xe2, 0x80, 0x82], // U+2002
+        [0xe2, 0x80, 0x83], // U+2003
+        [0xe2, 0x80, 0x84], // ...
         [0xe2, 0x80, 0x85],
         [0xe2, 0x80, 0x86],
         [0xe2, 0x80, 0x87],
         [0xe2, 0x80, 0x88],
         [0xe2, 0x80, 0x89],
-        [0xe2, 0x80, 0x8a],  // U+200A
-        [0xe2, 0x80, 0x8b],  // U+200B
-        [0xe2, 0x80, 0xaf],  // U+202F
-        [0xe2, 0x81, 0x9f],  // U+205F
+        [0xe2, 0x80, 0x8a], // U+200A
+        [0xe2, 0x80, 0x8b], // U+200B
+        [0xe2, 0x80, 0xaf], // U+202F
+        [0xe2, 0x81, 0x9f], // U+205F
     ];
     let nonce_len = 3 * 20;
     let mut nonce_bytes = vec![0x20; nonce_len];
@@ -169,13 +169,15 @@ fn mine_hash(
         if i > 1 && checker.check_prefix(&res_bytes) {
             let nonce = String::from_utf8(nonce_bytes).unwrap();
             let message = format!("{}{}", commit_message, nonce.as_str());
-            let commit_buf = repo.commit_create_buffer(
-                &author_signature,
-                &committer_signature,
-                &message,
-                &tree,
-                &parents_refs,
-            ).unwrap();
+            let commit_buf = repo
+                .commit_create_buffer(
+                    &author_signature,
+                    &committer_signature,
+                    &message,
+                    &tree,
+                    &parents_refs,
+                )
+                .unwrap();
 
             // verify sha1 is done correctly
             let res_oid = Oid::from_bytes(&res_bytes).unwrap();
@@ -189,12 +191,11 @@ fn mine_hash(
             let m = Message::Found((n_sum, res_oid, buf));
             tx.send(m).unwrap();
             break;
-        }
-        else {
+        } else {
             // Use the current sha to determine what the next nonce bytes are
             for (i, byte) in res_bytes.iter().enumerate() {
                 let j = (byte & 0x0f) as usize;
-                nonce_bytes[i*3..i*3+3].copy_from_slice(&chars[j][..]);
+                nonce_bytes[i * 3..i * 3 + 3].copy_from_slice(&chars[j][..]);
             }
         }
         i += 1;
@@ -206,9 +207,8 @@ fn mine_hash(
 }
 
 #[derive(Clap)]
-#[clap(version="0.1.0", author="YS-L <liauys@gmail.com>")]
+#[clap(version = "0.1.0", author = "YS-L <liauys@gmail.com>")]
 struct Opts {
-
     #[clap(short, long)]
     prefix: String,
 
@@ -218,18 +218,21 @@ struct Opts {
     #[clap(long)]
     reset_author: bool,
 
-    #[clap(long, default_value="1")]
+    #[clap(long, default_value = "1")]
     threads: String,
 
-    #[clap(long, default_value=".")]
-    repo: String
+    #[clap(long, default_value = ".")]
+    repo: String,
 }
 
 fn get_time_since_epoch() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
 }
 
-fn main()  {
+fn main() {
     let opts: Opts = Opts::parse();
     let prefix = opts.prefix;
     let repo_path = opts.repo;
@@ -248,7 +251,7 @@ fn main()  {
         let tx = tx.clone();
         let _prefix = prefix.clone();
         let _repo_path = repo_path.clone();
-        thread::spawn(move|| {
+        thread::spawn(move || {
             mine_hash(i, &tx, _prefix, _repo_path, reset_author);
         });
     }
@@ -267,7 +270,10 @@ fn main()  {
                 let time_per_hash = elapsed.as_secs_f64() / (n_hashed as f64);
                 eprintln!("\nFound after {} tries!", n_hashed);
                 eprintln!("Time taken: {:.2} s", elapsed.as_secs_f64());
-                eprintln!("Average time per hash: {:.3} us", 1_000_000.0 * time_per_hash);
+                eprintln!(
+                    "Average time per hash: {:.3} us",
+                    1_000_000.0 * time_per_hash
+                );
 
                 println!("{}", result_oid);
 
@@ -279,10 +285,11 @@ fn main()  {
                     head.set_target(
                         result_oid,
                         format!("git-miner moved from {}", commit.id()).as_str(),
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
                 break;
-            },
+            }
             Message::Progress(i) => {
                 n_hashed += i;
                 let cur = get_time_since_epoch();
@@ -291,8 +298,7 @@ fn main()  {
                     let rate = 1_000_000.0 * elapsed.as_secs_f64() / (n_hashed as f64);
                     let progress = format!(
                         "Computed {} hashes. Effective rate = {:.3} us per hash",
-                        n_hashed,
-                        rate,
+                        n_hashed, rate,
                     );
                     eprint!("\r{}", " ".repeat(prev_progress_len));
                     eprint!("\r{}", progress);
